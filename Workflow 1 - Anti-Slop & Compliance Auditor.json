@@ -1,0 +1,238 @@
+{
+  "name": "Workflow 1 - Anti-Slop & Compliance Auditor",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const rawText = $input.first().json.content.parts[0].text;\nconst cleaned = rawText.replace(/^```json\\s*/i, '').replace(/```\\s*$/, '').trim();\nconst audit = JSON.parse(cleaned);\nreturn [{ json: audit }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        0
+      ],
+      "id": "20fc34a9-68b8-4ab3-a1e8-10255e4c7626",
+      "name": "Parse Audit JSON"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst docType = $('Draft Intake Form').first().json['Document Type'];\nconst risks = (d.risk_reasons || []).map(r => `- ${r}`).join('\\n');\nconst slop = (d.slop_removed || []).map(s => `- ${s}`).join('\\n');\n\nconst report = [\n  `STATUS: FLAGGED FOR COMPLIANCE REVIEW (${docType})`,\n  ``,\n  `RISK REASONS:`,\n  risks || '- None listed',\n  ``,\n  `SLOP REMOVED:`,\n  slop || '- None listed',\n  ``,\n  `CLEAN REWRITE:`,\n  d.clean_rewrite\n].join('\\n');\n\nreturn [{\n  json: {\n    status: 'FLAGGED_FOR_REVIEW',\n    document_type: docType,\n    formatted_report: report\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        -96
+      ],
+      "id": "1e0bd933-a120-481f-8543-e11d16bc8b67",
+      "name": "Format Flagged Report"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst docType = $('Draft Intake Form').first().json['Document Type'];\n\nconst report = [\n  `STATUS: CLEARED FOR USE (${docType})`,\n  ``,\n  `CLEAN TEXT:`,\n  d.clean_rewrite\n].join('\\n');\n\nreturn [{\n  json: {\n    status: 'CLEARED',\n    document_type: docType,\n    formatted_report: report\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        96
+      ],
+      "id": "08def36f-312e-4591-9f27-0d477d791a31",
+      "name": "Format Cleared Report"
+    },
+    {
+      "parameters": {
+        "formTitle": "Anti-Slop & Compliance Auditor",
+        "formDescription": "Submit an AI-assisted draft for automated slop removal and broker-dealer compliance screening.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Document Type",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Client Email"
+                  },
+                  {
+                    "option": "Internal Memo"
+                  },
+                  {
+                    "option": "Investor Update"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Draft Text",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b26c284c-3b9c-4115-be4b-332c80630d92",
+      "name": "Draft Intake Form",
+      "webhookId": "30eb43ef-5935-4f77-964a-d7b51f6ce62b"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "models/gemini-3-flash-preview",
+          "cachedResultName": "Gemini 3 Flash Preview",
+          "cachedResultUrl": ""
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a strict broker-dealer compliance auditor and plain-language editor.\nAudit the following draft for:\n1. Regulatory/compliance risks (guarantees, \"risk-free\" claims, promissory performance, unverified returns, or misleading statements).\n2. AI slop (clichés like \"delve\", \"fast-paced landscape\", \"game-changing\", \"I hope this email finds you well\").\n\nDocument Type: {{ $json['Document Type'] }}\nDraft Text: {{ $json['Draft Text'] }}\n\nRespond ONLY with valid JSON using these exact keys (no markdown fences, no extra text):\n{\n  \"compliance_flag\": true or false,\n  \"risk_reasons\": [\"list specific compliance violations, or empty array if none\"],\n  \"slop_removed\": [\"list specific AI clichés found\"],\n  \"clean_rewrite\": \"A direct, plain-language rewrite with all slop and uncompliant claims removed. If compliance_flag is true, add [REQUIRES COMPLIANCE REVIEW] at the top.\"\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "1d4ec986-507c-4cd2-9611-02a6317d2bb5",
+      "name": "Gemini Compliance & Slop Audit",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "nkS8vXLvNJbFXxwK",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "da580cee-c56a-4c74-be10-6c8fb8ede8ac",
+              "leftValue": "={{ $json.compliance_flag }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        816,
+        0
+      ],
+      "id": "93bac424-ac89-4234-a103-08955fd085eb",
+      "name": "Route by Compliance Flag"
+    },
+    {
+      "parameters": {
+        "content": "ARCHITECTURE OVERVIEW\nGoal: Pre-screen broker-dealer drafts for FINRA Rule 2210 / policy risks and strip AI slop before sending or escalating.\nInput Schema: Document Type (text) and Draft Text (text) via form intake.\nModel & Gating: Gemini model with strict JSON output, unpacked in JS, and routed by boolean compliance_flag into FLAGGED FOR COMPLIANCE REVIEW (true) or CLEARED FOR USE (false).\n",
+        "height": 224,
+        "width": 304
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -272
+      ],
+      "id": "6f02c3b0-e713-439b-a2ed-7c15a585752a",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Parse Audit JSON": {
+      "main": [
+        [
+          {
+            "node": "Route by Compliance Flag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Gemini Compliance & Slop Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Compliance & Slop Audit": {
+      "main": [
+        [
+          {
+            "node": "Parse Audit JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Compliance Flag": {
+      "main": [
+        [
+          {
+            "node": "Format Flagged Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Cleared Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0f702272-1f00-4813-9f0d-d8305750266f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "30a184560733381e2c0bffbe1ffae9705bccfc6fdc39ddfd102b4a5aebabf855"
+  },
+  "nodeGroups": [],
+  "id": "pPGVkwdPpNMO0cgC",
+  "tags": []
+}
